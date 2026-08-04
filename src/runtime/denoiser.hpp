@@ -2640,19 +2640,20 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
         for (int c = 0; c < order; c++)  // computing coefficients
             lms_coeff[c] = linear_multistep_coeff(order, i, c);
 
+        size_t hist_size = hist.size();
         sd::Tensor<float> d_cur = (x - denoised) / sigma;
         switch (order) {
             case 4:  // derivative + 3 history points
-                x += hist[hist.size() - 2] * lms_coeff[3];
+                x += hist[hist_size - 3] * lms_coeff[3];
             case 3:
-                x += hist[hist.size() - 1] * lms_coeff[2];
+                x += hist[hist_size - 2] * lms_coeff[2];
             case 2:
-                x += hist.back() * lms_coeff[1];
+                x += hist[hist_size - 1] * lms_coeff[1];
             case 1:
                 x += d_cur * lms_coeff[0];
         }
 
-        if (hist.size() == static_cast<size_t>(max_order - 1)) {
+        if (hist_size == static_cast<size_t>(max_order - 1)) {
             hist.erase(hist.begin());
         }
         hist.push_back(std::move(d_cur));
