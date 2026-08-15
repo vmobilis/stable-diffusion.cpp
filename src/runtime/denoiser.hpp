@@ -2582,10 +2582,11 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
                                     sd::Tensor<float> x,
                                     const std::vector<float>& sigmas,
                                     const SamplerExtraArgs& extra_sample_args) {
-    // Linear Multi-Step from https://github.com/crowsonkb/k-diffusion
+    // Linear Multi-Step from https://github.com/crowsonkb/k-diffusion,
+    // modified with "history shift" value, which seemingly needs less steps
     int divisions = 1000;
     int max_order = 4;
-    int shift = 1;  // 4. 0 - as in original, 4, 1 - produced in PR #1843
+    int shift = 1;  // 4. 0 - original, 4, 1 - PR leejet#1843, 3, 1 - smoother image
     for (const auto& [key, value] : extra_sample_args) {
         int parsed = 0;
         if (key == "lms_max_order") {
@@ -2594,8 +2595,9 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
                 continue;
             }
             max_order = std::max(1, parsed);
-            // smaller values make result closer to Euler
-            // bigger values need more steps
+            // smaller values make the result softer, closer to Euler
+            // higher values need more steps
+            // values above 12 can produce NaNs, depending on steps and scheduler
         }
         if (key == "lms_shift") {
             if (!parse_strict_int(value, parsed)) {
@@ -2603,8 +2605,8 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
                 continue;
             }
             shift = std::max(0, parsed);
-            // opposite to max_order,
-            // higher values need less steps but behaves closer to Euler
+            // for a low number of steps, the value 1 works best
+            // not needed for karras and exponential schedulers
         }
         if (key == "lms_divisions") {
             if (!parse_strict_int(value, parsed)) {
@@ -2613,15 +2615,17 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
             }
             divisions = parsed;  // std::max(1, parsed);
             // values < 1 always produce noise
-            // values above 35M require double precision in integral
+            // values above 30M require double precision in the integrator
+            // (they are needless and just slow the integration down, but
+            //  with single precision they softly produce noise
+            //  near the 35M, it can be used for distorted generations)
         }
     }
 
     auto linear_multistep_coeff = [=](const int order, const int m, const int j) -> float {
         if (!divisions)
             return sigmas[m + 1] - sigmas[m];  // delta / 0 * 0
-#define LMS_PRECISION float  //double  // <float> can be used if max_order < 10
-                             // and divisions are less than 30-35 millions
+#define LMS_PRECISION float  // when divisions > 30 millions, the double precision fixes noise
         const LMS_PRECISION a = sigmas[m], dx = (sigmas[m + 1] - a) / divisions, s = sigmas[m - j];
         const LMS_PRECISION b0 = a + 0.5f * dx;  // using Riemann middle integral
         LMS_PRECISION sum      = 0.0f;
@@ -2643,7 +2647,7 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
 
     int steps = static_cast<int>(sigmas.size()) - 1;
     max_order = std::min(max_order, steps);  // history can not be larger than steps
-    LOG_DEBUG("linear multi-step sampler: max_order = %i, shift = %i, divisions = %i", max_order, shift, divisions);
+    LOG_DEBUG("linear multi-step sampler: lms_max_order = %i, lms_shift = %i, lms_divisions = %i", max_order, shift, divisions);
     std::vector<float> lms_coeff(max_order);
     std::vector<sd::Tensor<float>> hist = {};
 
@@ -2658,12 +2662,12 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
 
         const int order = std::min(max_order, i + 1);
 
-        for (int c = 0; c < order; c++)  // computing coefficients
+        for (int c = shift; c < order; c++)  // computing coefficients
             lms_coeff[c] = linear_multistep_coeff(order, i, c);
 
         sd::Tensor<float> d_cur = (x - denoised) / sigma;
         x += d_cur * lms_coeff[0];
-        if (max_order > 1) {  // if max_order == 1, history is not used (order always < 2)
+        if (max_order > 1) {  // if max_order == 1, the history is not used (order always < 2)
             int hist_size_p1 = hist.size() + 1;
             if (i) {  // history does not exist at 1st step
                 int hist_max = hist.size() - 1;
