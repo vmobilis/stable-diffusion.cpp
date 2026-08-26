@@ -2662,7 +2662,7 @@ static sd::Tensor<float> sample_lms(denoise_cb_t model,
 
         const int order = std::min(max_order, i + 1);
 
-        for (int c = shift; c < order; c++)  // computing coefficients
+        for (int c = 0; c < order; c++)  // computing coefficients
             lms_coeff[c] = linear_multistep_coeff(order, i, c);
 
         sd::Tensor<float> d_cur = (x - denoised) / sigma;
