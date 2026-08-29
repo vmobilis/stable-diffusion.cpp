@@ -2644,11 +2644,11 @@ public:
             bool preview_needed = preview.callback != nullptr;
             if (preview_needed) {
                 int preview_interval = sd_get_preview_interval();
-                if (preview_interval > 0) {         // every Nth step
+                if (preview_interval > 0) {  // every Nth step
                     preview_needed = step % preview_interval == 0;
                 } else if (preview_interval < 0) {  // only (-N)th step
                     preview_needed = step == -preview_interval;
-                } else {                            // last step of base resolution / high noise pass
+                } else {  // last step of base resolution / high noise pass
                     preview_needed = preview_last_step && step == steps;
                 }
             }
@@ -5675,7 +5675,7 @@ SD_API bool generate_image(sd_ctx_t* sd_ctx,
 
     std::vector<sd::Tensor<float>> final_latents;
     sd_ctx->sd->preview_last_step = true;
-    int64_t denoise_start = ggml_time_ms();
+    int64_t denoise_start         = ggml_time_ms();
     for (int b = 0; b < request.batch_count; b++) {
         sd_cancel_mode_t cancel = sd_ctx->sd->get_cancel_flag();
         if (cancel == SD_CANCEL_ALL) {
@@ -5734,7 +5734,7 @@ SD_API bool generate_image(sd_ctx_t* sd_ctx,
                   (sampling_end - sampling_start) * 1.0f / 1000);
         return false;
     }
-    int64_t denoise_end = ggml_time_ms();
+    int64_t denoise_end           = ggml_time_ms();
     sd_ctx->sd->preview_last_step = false;
     LOG_INFO("generating %zu latent images completed, taking %.2fs",
              final_latents.size(),
@@ -6949,7 +6949,7 @@ SD_API bool generate_video(sd_ctx_t* sd_ctx,
         LOG_DEBUG("sample(high noise) %dx%dx%d", W, H, T);
 
         sd_ctx->sd->preview_last_step = true;
-        int64_t sampling_start = ggml_time_ms();
+        int64_t sampling_start        = ggml_time_ms();
         std::vector<float> high_noise_sigmas(plan.sigmas.begin(), plan.sigmas.begin() + plan.high_noise_sample_steps + 1);
         plan.sigmas = std::vector<float>(plan.sigmas.begin() + plan.high_noise_sample_steps, plan.sigmas.end());
 
