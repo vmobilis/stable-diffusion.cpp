@@ -121,9 +121,9 @@ class MT19937RNG : public RNG {
     }
 
 public:
-    static constexpr std::string_view rng_name = "cpu";
-
     MT19937RNG(uint64_t seed = 0) { manual_seed(seed); }
+
+    virtual const char* const rn() override { return "cpu"; }
 
     void manual_seed(uint64_t seed) override {
         s.seed_     = seed;
