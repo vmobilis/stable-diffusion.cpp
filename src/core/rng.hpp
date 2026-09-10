@@ -9,7 +9,7 @@ public:
     virtual void manual_seed(uint64_t seed)      = 0;
     virtual std::vector<float> randn(uint32_t n) = 0;
 
-    virtual const char* const rn() { return "rng"; }
+    virtual const char* const rn() const { return "rng"; }
 };
 
 class STDDefaultRNG : public RNG {
@@ -17,7 +17,7 @@ private:
     std::default_random_engine generator;
 
 public:
-    virtual const char* const rn() override { return "std"; }
+    virtual const char* const rn() const override { return "std"; }
 
     void manual_seed(uint64_t seed) override {
         generator.seed((unsigned int)seed);
