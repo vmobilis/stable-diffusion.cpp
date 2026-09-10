@@ -93,7 +93,7 @@ public:
         this->offset = 0;
     }
 
-    virtual const char* const rn() override { return "cuda"; }
+    virtual const char* const rn() const override { return "cuda"; }
 
     void manual_seed(uint64_t seed) override {
         this->seed   = seed;
