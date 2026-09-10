@@ -6,10 +6,10 @@
 
 class RNG {
 public:
-    static constexpr std::string_view rng_name = "rng";
-
     virtual void manual_seed(uint64_t seed)      = 0;
     virtual std::vector<float> randn(uint32_t n) = 0;
+
+    virtual const char* const rn() { return "rng"; }
 };
 
 class STDDefaultRNG : public RNG {
@@ -17,7 +17,7 @@ private:
     std::default_random_engine generator;
 
 public:
-    static constexpr std::string_view rng_name = "std";
+    virtual const char* const rn() override { return "std"; }
 
     void manual_seed(uint64_t seed) override {
         generator.seed((unsigned int)seed);
