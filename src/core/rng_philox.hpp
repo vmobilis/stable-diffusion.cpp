@@ -88,6 +88,8 @@ private:
     }
 
 public:
+    static constexpr std::string_view rng_name = "cuda";
+
     PhiloxRNG(uint64_t seed = 0) {
         this->seed   = seed;
         this->offset = 0;
