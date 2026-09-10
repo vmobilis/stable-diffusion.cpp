@@ -88,12 +88,12 @@ private:
     }
 
 public:
-    static constexpr std::string_view rng_name = "cuda";
-
     PhiloxRNG(uint64_t seed = 0) {
         this->seed   = seed;
         this->offset = 0;
     }
+
+    virtual const char* const rn() override { return "cuda"; }
 
     void manual_seed(uint64_t seed) override {
         this->seed   = seed;
