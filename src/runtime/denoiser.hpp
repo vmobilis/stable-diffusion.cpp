@@ -16,6 +16,10 @@
 #include "runtime/gits_noise.h"
 #include "runtime/guidance.h"
 
+//#include "core/rng.hpp"  // included in core/tensor.hpp
+#include "core/rng_mt19937.hpp"
+#include "core/rng_philox.hpp"
+
 /*================================================= CompVisDenoiser ==================================================*/
 
 // Ref: https://github.com/crowsonkb/k-diffusion/blob/master/k_diffusion/external.py
@@ -2714,14 +2718,15 @@ private:
 class BrownianTreeNoiseSampler : public NoiseSampler {
 public:
     BrownianTreeNoiseSampler(const sd::Tensor<float>& x_template,
+                             std::shared_ptr<RNG> r,
                              double sigma_min,
                              double sigma_max,
                              uint64_t seed)
         : t_min_(sigma_min),
           t_max_(sigma_max),
+          rng(r),  // rng(std::move(r))
           shape_(x_template.shape()),
           root_seed_(mix64(seed, 0x9E3779B97F4A7C15ULL)) {
-        auto rng = std::make_shared<STDDefaultRNG>();
         rng->manual_seed(mix64(seed, 0xBF58476D1CE4E5B9ULL));
         w_at_tmax_ = sd::Tensor<float>::randn(shape_, rng) * std::sqrt(static_cast<float>(t_max_ - t_min_));
     }
@@ -2772,7 +2777,6 @@ private:
         }
         double m       = 0.5 * (a + c);
         double std_dev = std::sqrt((c - m) * (m - a) / (c - a));
-        auto rng       = std::make_shared<STDDefaultRNG>();
         rng->manual_seed(node_seed);
         auto z   = sd::Tensor<float>::randn(shape_, rng);
         auto w_m = 0.5f * (w_a + w_c) + static_cast<float>(std_dev) * z;
@@ -2787,6 +2791,7 @@ private:
 
     double t_min_;
     double t_max_;
+    std::shared_ptr<RNG> rng;
     std::vector<int64_t> shape_;
     uint64_t root_seed_;
     sd::Tensor<float> w_at_tmax_;
@@ -2796,13 +2801,25 @@ private:
 static std::unique_ptr<NoiseSampler> make_noise_sampler(const sd::Tensor<float>& x, std::shared_ptr<RNG> rng, sample_method_t method, const std::vector<float>& sigmas, const SamplerExtraArgs& extra_args) {
     bool brownian_tree     = (method == DPMPP2M_SDE_BT_SAMPLE_METHOD);
     bool def_brownian_tree = brownian_tree;
+    std::shared_ptr<RNG> r = rng;
 
     for (const auto& [key, value] : extra_args) {
         if (key == "noise_sampler") {
             if (value == "iid") {
-                brownian_tree = false;
-            } else if (value == "brownian_tree") {
+                brownian_tree = false;  // setting both for the case when
+                r             = rng;    // the key is repeated several times
+            } else if (value == "brownian_tree" || value == "brownian_tree_std") {
                 brownian_tree = true;
+                r             = std::make_shared<STDDefaultRNG>();
+            } else if (value == "brownian_tree_cpu") {
+                brownian_tree = true;
+                r             = std::make_shared<MT19937RNG>();
+            } else if (value == "brownian_tree_cuda") {
+                brownian_tree = true;
+                r             = std::make_shared<PhiloxRNG>();
+            } else if (value == "brownian_tree_sampler_rng") {
+                brownian_tree = true;
+                r             = rng;
             } else {
                 LOG_WARN("unknown noise_sampler value '%s'; using default", value.c_str());
             }
@@ -2824,16 +2841,16 @@ static std::unique_ptr<NoiseSampler> make_noise_sampler(const sd::Tensor<float>&
             auto draw          = rng->randn(2);
             std::memcpy(&tree_seed, draw.data(), sizeof(tree_seed));
             if (!def_brownian_tree) {
-                LOG_INFO("setting noise sampler to Brownian tree");
+                LOG_INFO("setting noise sampler to Brownian tree (%s)", r->rn());
             }
-            return std::make_unique<BrownianTreeNoiseSampler>(x, sigma_min, sigma_max, tree_seed);
+            return std::make_unique<BrownianTreeNoiseSampler>(x, std::move(r), sigma_min, sigma_max, tree_seed);
         }
     }
 
     if (def_brownian_tree) {
         LOG_INFO("setting noise sampler to independent and identically distributed (iid)");
     }
-    return std::make_unique<IIDGaussianNoiseSampler>(x, rng);
+    return std::make_unique<IIDGaussianNoiseSampler>(x, std::move(r));
 }
 
 // k diffusion reverse ODE: dx = (x - D(x;\sigma)) / \sigma dt; \sigma(t) = t
