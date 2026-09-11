@@ -16,7 +16,7 @@
 #include "runtime/gits_noise.h"
 #include "runtime/guidance.h"
 
-//#include "core/rng.hpp"  // included in core/tensor.hpp
+// #include "core/rng.hpp"  // included in core/tensor.hpp
 #include "core/rng_mt19937.hpp"
 #include "core/rng_philox.hpp"
 
